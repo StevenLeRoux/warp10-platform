@@ -21,6 +21,12 @@ sourceSets {
 }
 
 dependencies {
+
+	// 
+	// Elastic search dependencies
+	//
+	compile 'org.elasticsearch.client:elasticsearch-rest-high-level-client:6.2.4'
+	
     //
     // io.warp10 dependencies
     //
