@@ -1,5 +1,6 @@
 package io.metrics.directory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
@@ -9,6 +10,7 @@ import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.main.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,10 @@ import io.warp10.sensision.Sensision;
  */
 public class ExplorerClientPool {
 
+    /**
+     * Is current backend client available
+     */
+    protected boolean connected = false;
 
     private final ElasticClient client = ElasticClient.getInstance();
 
@@ -132,6 +138,8 @@ public class ExplorerClientPool {
         }
         client.init(ELASTIC_HOSTS_NAMES, ES_USER, ES_PASSWORD);
 
+        this.tryToConnect();
+        
         this.bulkClient = new BulkClient(client, this.ELASTIC_BULK_COUNT,this.ELASTIC_BULK_CONCURRENT_REQUESTS, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);     
     }
 
@@ -232,13 +240,51 @@ public class ExplorerClientPool {
      * @param bulkResponse failed request
      */
     public void onFailBulkRequest(BulkRequest bulkRequest) {
+        
+        this.tryToConnect();
+        
         // Send error requests count to sensision
         Sensision.update("warp10.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
-        BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
-        for (DocWriteRequest bulkItem : bulkRequest.requests()) {
-            errorBulk.addBulk(bulkItem);
+        // In case of requests failure
+        if (this.connected) {
+            BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
+            for (DocWriteRequest bulkItem : bulkRequest.requests()) {
+                errorBulk.addBulk(bulkItem);
+            }
+            
+            errorBulk.closeClient();
         }
-        errorBulk.closeClient();
+    }
+
+    /** 
+     * Check connection to backend
+     * @param currentProcessing
+     */
+    public void tryToConnect() {
+        try {
+            Boolean oldConnect = this.connected;
+            MainResponse response = client.getClient().info();
+            this.connected = response.isAvailable();
+            
+            // When backend is back start restore current client process
+            if (this.connected && !oldConnect) {
+                restore(this.processing);
+            }
+        } catch (IOException e) {
+            LOG.warn(e.getMessage());
+        }
+    }
+
+    /** 
+     * Restore current processing state in case of error failure
+     * @param currentProcessing
+     */
+    private void restore(ConcurrentMap<String, DocWriteRequest> currentProcessing) {
+        BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
+        for (DocWriteRequest bulkItem : currentProcessing.values()) {
+            errorBulk.addBulk(bulkItem);
+        }  
+        errorBulk.closeClient();      
     }
 }
