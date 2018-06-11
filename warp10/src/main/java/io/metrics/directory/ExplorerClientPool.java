@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
@@ -24,10 +25,17 @@ import io.warp10.sensision.Sensision;
  */
 public class ExplorerClientPool {
 
+    
     /**
      * Is current backend client available
      */
-    protected boolean connected = false;
+    private AtomicBoolean connected = new AtomicBoolean(false);
+    
+
+    /**
+     * Is current testing connection on backend client
+     */
+    private AtomicBoolean connecting = new AtomicBoolean(false);
 
     private final ElasticClient client = ElasticClient.getInstance();
 
@@ -247,7 +255,7 @@ public class ExplorerClientPool {
         Sensision.update("warp.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
         // In case of requests failure
-        if (this.connected) {
+        if (this.connected.get()) {
             BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
             for (DocWriteRequest bulkItem : bulkRequest.requests()) {
                 errorBulk.addBulk(bulkItem);
@@ -256,23 +264,52 @@ public class ExplorerClientPool {
             errorBulk.closeClient();
         }
     }
+    
+    /** 
+     * Check if current client is availble
+     * true connected
+     * false not connected
+     * @return
+     */
+    public boolean getConnectedStatus() {
+        return this.connected.get();
+    }
 
     /** 
      * Check connection to backend
      * @param currentProcessing
      */
     public void tryToConnect() {
-        try {
-            Boolean oldConnect = this.connected;
-            MainResponse response = client.getClient().info();
-            this.connected = response.isAvailable();
-            
-            // When backend is back start restore current client process
-            if (this.connected && !oldConnect) {
-                restore(this.processing);
+        
+        // Thread safe operation, set boolean connecting to true
+        if (this.connecting.compareAndSet(false, true)) {
+            try {
+                
+                // Get current client answer
+                MainResponse response = client.getClient().info();
+                
+                // Check if server is available
+                if (response.isAvailable()) {
+                    
+                    // If server is now available compare to old value
+                    if (this.connected.compareAndSet(false, response.isAvailable())) {
+                        
+                        // Restart processing at stop state
+                        restore(this.processing);
+                    } 
+                } else {
+                    
+                    // If server isn't available, set connected to false
+                    this.connected.compareAndSet(true, response.isAvailable());
+                }
+                
+            } catch (IOException e) {
+                LOG.warn(e.getMessage());
+            } finally {
+                
+             // Release boolean connecting to true
+                this.connecting.compareAndSet(true, false);
             }
-        } catch (IOException e) {
-            LOG.warn(e.getMessage());
         }
     }
 

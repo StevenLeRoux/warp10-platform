@@ -133,7 +133,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
     public boolean store(String source, GTS gts) {
         
         // Check if backend is alive
-        if (!this.client.connected) {
+        if (!this.client.getConnectedStatus()) {
             this.client.tryToConnect();
             return false;
         }
