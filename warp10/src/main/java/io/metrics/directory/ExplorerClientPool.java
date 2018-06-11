@@ -166,7 +166,7 @@ public class ExplorerClientPool {
          * Prepare a send request, let empty as now
          */
         public void beforeBulk(long executionId, BulkRequest request) {
-            Sensision.update("warp10.directory.explorer.insert.requests.total", Sensision.EMPTY_LABELS, 1);
+            Sensision.update("warp.directory.explorer.insert.requests.total", Sensision.EMPTY_LABELS, 1);
         }
 
         /**
@@ -200,9 +200,9 @@ public class ExplorerClientPool {
     public void onSucessBulkResponse(BulkResponse bulkResponse, int numberOfActions) {
 
         // Send success: document Count, requests count and request elapsed time (in platform TU) on sensition
-        Sensision.update("warp10.directory.explorer.insert.documents.count", Sensision.EMPTY_LABELS, numberOfActions);
-        Sensision.update("warp10.directory.explorer.insert.requests.success", Sensision.EMPTY_LABELS, 1);
-        Sensision.update("warp10.directory.explorer.insert.elapsed.time", Sensision.EMPTY_LABELS, bulkResponse.getTook().getMillis()*Constants.TIME_UNITS_PER_MS);
+        Sensision.update("warp.directory.explorer.insert.documents.count", Sensision.EMPTY_LABELS, numberOfActions);
+        Sensision.update("warp.directory.explorer.insert.requests.success", Sensision.EMPTY_LABELS, 1);
+        Sensision.update("warp.directory.explorer.insert.elapsed.time", Sensision.EMPTY_LABELS, bulkResponse.getTook().getMillis()*Constants.TIME_UNITS_PER_MS);
 
         for (BulkItemResponse bulkItemResponse : bulkResponse) { 
             String id = bulkItemResponse.getResponse().getId(); 
@@ -244,7 +244,7 @@ public class ExplorerClientPool {
         this.tryToConnect();
         
         // Send error requests count to sensision
-        Sensision.update("warp10.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
+        Sensision.update("warp.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
         // In case of requests failure
         if (this.connected) {

@@ -143,7 +143,9 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         // INGRESS_METADATA_SOURCE -> /update
         // INGRESS_METADATA_UPDATE_ENDPOINT -> /meta
 
-        if (null == this.ids.putIfAbsent(gts.getId(), true)){
+        boolean notKnown = (null == this.ids.putIfAbsent(gts.getId(), true));
+        
+        if (notKnown){
             Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_DIRECTORY_GTS, Sensision.EMPTY_LABELS, 1);
         }
         
@@ -151,7 +153,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         ElasticSearchItem storeItem = new ElasticSearchItem(gts, ES_APP, ES_INDEX_NAME);
 
         // If request corresponds to a meta update, then apply an update only on the series attributes
-        if(Configuration.INGRESS_METADATA_UPDATE_ENDPOINT == source) {
+        if(Configuration.INGRESS_METADATA_UPDATE_ENDPOINT == source && notKnown) {
             
 			// Create an Elastic Update request
 			UpdateRequest updateRequest = new UpdateRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
