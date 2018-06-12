@@ -1,8 +1,11 @@
 package io.metrics.directory;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.common.collect.MapMaker;
@@ -14,6 +17,7 @@ import io.warp10.continuum.sensision.SensisionConstants;
 import io.warp10.continuum.store.Constants;
 import io.warp10.sensision.Sensision;
 import io.warp10.warp.sdk.DirectoryPlugin;
+import jline.internal.Log;
 
 /**
  * Plugin which defines functions directory function to write Warp meta-data in Elastic-Search
@@ -61,6 +65,17 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * By default use explorer
      */
     private String ES_INDEX_NAME = "explorer";
+    
+    
+    /**
+     * Parameter used in Directory ES
+     * Do we restore based on HBASE value
+     */
+    private boolean ES_RESTORE = false;
+    
+    private int missing;
+    
+    private AtomicBoolean tmp = new AtomicBoolean(false);
 
     /**
      * Parameter used to indicate whether Elastic directory have to process HBase reload data,
@@ -113,12 +128,27 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
             this.ES_INDEX_NAME = properties.getProperty("directory.es.index.name");
         }
 
+        if (null != properties.getProperty("directory.es.restore")) {
+            this.ES_RESTORE = Boolean.parseBoolean(properties.getProperty("directory.es.restore"));
+        }
+
         this.init = "true".equals(properties.getProperty(io.warp10.continuum.Configuration.DIRECTORY_INIT));
 
         LOG.debug("Start DirectoryES - init");
 
         this.client = new ExplorerClientPool();
         this.client.init(properties);
+        
+        if (this.init && this.ES_RESTORE) {
+            loadAllIds();
+        }
+    }
+
+    private void loadAllIds() {
+        long now = System.currentTimeMillis();
+        this.client.loadIds(this.ids, this.ES_INDEX_NAME);
+        Long duration = System.currentTimeMillis() - now;
+        LOG.info("Load: " + this.ids.size() + " gts in " + duration + "ms");
     }
 
     /**
@@ -132,16 +162,33 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      */
     public boolean store(String source, GTS gts) {
         
+        // source
+        // null -> hbase load
+        // INGRESS_METADATA_SOURCE -> /update
+        // INGRESS_METADATA_UPDATE_ENDPOINT -> /meta
+        
         // Check if backend is alive
         if (!this.client.getConnectedStatus()) {
             this.client.tryToConnect();
             return false;
         }
         
-        // source
-        // null -> hbase load
-        // INGRESS_METADATA_SOURCE -> /update
-        // INGRESS_METADATA_UPDATE_ENDPOINT -> /meta
+        
+        // When loading directory and restore activated
+        if (null == source && this.ES_RESTORE) {
+            if (this.ids.containsKey(gts.getId())) {
+                return true;
+            } else {
+                missing++;
+            }
+            //return true;
+        } 
+        
+        if (source != null && this.ES_RESTORE) {
+            if (tmp.compareAndSet(false, true)) {
+                LOG.info("Restore added " + missing + " gts");
+            }
+        }
 
         boolean notKnown = (null == this.ids.putIfAbsent(gts.getId(), true));
         

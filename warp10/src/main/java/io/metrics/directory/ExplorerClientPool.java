@@ -2,16 +2,34 @@ package io.metrics.directory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.get.GetRequest;
+import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.main.MainResponse;
+import org.elasticsearch.action.search.ClearScrollRequest;
+import org.elasticsearch.action.search.ClearScrollResponse;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.search.SearchScrollRequest;
+import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.Scroll;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
+import org.python.jline.internal.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -324,4 +342,86 @@ public class ExplorerClientPool {
         }  
         errorBulk.closeClient();      
     }
+
+    public boolean exist(String id, String indexName) throws IOException {
+        GetRequest getRequest = new GetRequest(indexName);
+        
+        getRequest.id(id);
+        
+        // Do not load current document source
+        FetchSourceContext fetchSourceContext = new FetchSourceContext(false);
+        getRequest.fetchSourceContext(fetchSourceContext);
+        GetResponse getResponse = this.client.getClient().get(getRequest);
+        if (getResponse.isExists()) {
+            return true;
+        } else {
+            return false;
+        }
+        
+    }
+
+
+    public boolean loadIds(ConcurrentMap<String, Boolean> ids, String indexName) {
+
+        try {
+            
+            // Set scroll request size and keep alive scroll time
+            int requestSize = this.ELASTIC_BULK_COUNT;
+            final Scroll scroll = new Scroll(TimeValue.timeValueMinutes(1L));
+            
+            // Prepare search all
+            SearchRequest searchRequest = new SearchRequest(indexName); 
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            searchSourceBuilder.query(QueryBuilders.matchAllQuery()); 
+            
+            // Remove source from result and set request option
+            searchSourceBuilder.fetchSource(false);
+            searchSourceBuilder.size(requestSize); 
+            searchRequest.scroll(scroll);
+            searchRequest.source(searchSourceBuilder);
+            
+            // Execute request
+            SearchResponse searchResponse = client.getClient().search(searchRequest);
+            
+            // Get Scroller id
+            String scrollId = searchResponse.getScrollId(); 
+            
+            // Loop over search result         
+            SearchHit[] searchHits = searchResponse.getHits().getHits();
+
+            while (searchHits != null && searchHits.length > 0) { 
+                
+                for (SearchHit searchHit : searchHits) {
+                    ids.putIfAbsent(searchHit.getId(), true);
+                }
+                
+                SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); 
+                scrollRequest.scroll(scroll);
+                searchResponse = client.getClient().searchScroll(scrollRequest);
+                scrollId = searchResponse.getScrollId();
+                searchHits = searchResponse.getHits().getHits();
+            }
+            ClearScrollRequest clearScrollRequest = new ClearScrollRequest(); 
+            clearScrollRequest.addScrollId(scrollId);
+            
+            client.getClient().clearScrollAsync(clearScrollRequest,Clearlistener);
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            LOG.warn("Exeption during restore" + e.getMessage());
+        }
+        return false;
+    }
+    
+    ActionListener<ClearScrollResponse> Clearlistener =new ActionListener<ClearScrollResponse>() {
+        @Override
+        public void onResponse(ClearScrollResponse clearScrollResponse) {
+            LOG.debug("Clear success");
+        }
+
+        @Override
+        public void onFailure(Exception e) {
+            LOG.debug("Fail to clear");
+        }
+    };
 }
