@@ -1,23 +1,23 @@
 package io.metrics.directory;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.google.common.collect.MapMaker;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.MapMaker;
+
 import io.warp10.continuum.Configuration;
 import io.warp10.continuum.sensision.SensisionConstants;
 import io.warp10.continuum.store.Constants;
 import io.warp10.sensision.Sensision;
 import io.warp10.warp.sdk.DirectoryPlugin;
-import jline.internal.Log;
 
 /**
  * Plugin which defines functions directory function to write Warp meta-data in Elastic-Search

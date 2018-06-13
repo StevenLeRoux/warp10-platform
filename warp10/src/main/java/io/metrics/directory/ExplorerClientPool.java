@@ -2,8 +2,6 @@ package io.metrics.directory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,10 +24,8 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
-import org.python.jline.internal.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -260,15 +256,16 @@ public class ExplorerClientPool {
 
         waiting.put(request.id(), waitingList);
     }
-
+    
     /**
      * Manage fail bulk response in case of requests
      * @param bulkResponse failed request
      */
     public void onFailBulkRequest(BulkRequest bulkRequest) {
         
-        this.tryToConnect();
-        
+        if (this.connected.compareAndSet(true, false)) {
+            this.tryToConnect();
+        }
         // Send error requests count to sensision
         Sensision.update("warp.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
