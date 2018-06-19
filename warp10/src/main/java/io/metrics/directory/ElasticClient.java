@@ -11,18 +11,18 @@ import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
 
 public class ElasticClient {
-    
+
     private static ElasticClient getElasticClient = new ElasticClient();
-    
+
     private RestHighLevelClient client;
-    
+
     /**
      * Open elastic client as Singleton
      * Elastic client manage it's own thread
      */
     private ElasticClient() { 
     }
-    
+
     /** 
      * Set client as Singleton based on init properties
      * @param hostsNames
@@ -47,17 +47,17 @@ public class ElasticClient {
 
         // Initialize High level Elastic Rest builder client
         RestClientBuilder restClientBuilder = RestClient.builder(httpsHost);
-        
+
         restClientBuilder.setMaxRetryTimeoutMillis(1000000);
-        
+
         // set auth
         restClientBuilder.setHttpClientConfigCallback(getHttpConfig(credentialsProvider));
-        
+
         // Open current Elastic client
         this.client = new RestHighLevelClient(
                 restClientBuilder);
     }
-    
+
     /** 
      * Config callback method
      * @param credentialsProvider
@@ -71,21 +71,21 @@ public class ElasticClient {
         };
         return httpConfig;
     }
-    
+
     /**
      * Get singleton instance
      * @return
      */
     public static ElasticClient getInstance( ) {
-       return getElasticClient;
+        return getElasticClient;
     }
-    
+
     /**
      * Get current Elastic client
      * @return
      */
     public RestHighLevelClient getClient() {
         return this.client;
-     }
+    }
 
 }

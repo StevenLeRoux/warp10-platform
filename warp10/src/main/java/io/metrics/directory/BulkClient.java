@@ -3,6 +3,7 @@ package io.metrics.directory;
 
 import java.util.HashMap;
 import java.util.Map;
+
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkProcessor;
@@ -63,20 +64,13 @@ public class BulkClient {
         processing.put(request.id(), request);
         bulkProcessor.add(request);
     }
-    
+
     /**
      * Remove current string from processing
      * @param id
      */
     public void removeProcessing(String id) {
         processing.remove(id);
-    }
-
-    /**
-     * Close current elastic client
-     */
-    public void closeClient() {
-        this.bulkProcessor.close();
     }
 
     /**

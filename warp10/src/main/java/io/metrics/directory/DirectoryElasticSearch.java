@@ -51,30 +51,30 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * By default use labels
      */
     private String ES_LABELS = "labels";
-    
+
     /**
      * Parameter used in Directory ES
      * Name of the elastic key for the attributes
      * By default use attributes
      */
     private String ES_ATTRIBUTES = "attributes";
-    
+
     /**
      * Parameter used in Directory ES
      * Name of the elastic index name
      * By default use explorer
      */
     private String ES_INDEX_NAME = "explorer";
-    
-    
+
+
     /**
      * Parameter used in Directory ES
      * Do we restore based on HBASE value
      */
     private boolean ES_RESTORE = false;
-    
+
     private int missing;
-    
+
     private AtomicBoolean tmp = new AtomicBoolean(false);
 
     /**
@@ -138,7 +138,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
 
         this.client = new ExplorerClientPool();
         this.client.init(properties);
-        
+
         if (this.init && this.ES_RESTORE) {
             loadAllIds();
         }
@@ -161,19 +161,18 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * @return true if the storing succeeded, false otherwise
      */
     public boolean store(String source, GTS gts) {
-        
+
         // source
         // null -> hbase load
         // INGRESS_METADATA_SOURCE -> /update
         // INGRESS_METADATA_UPDATE_ENDPOINT -> /meta
-        
+
         // Check if backend is alive
         if (!this.client.getConnectedStatus()) {
             this.client.tryToConnect();
             return false;
         }
-        
-        
+
         // When loading directory and restore activated
         if (null == source && this.ES_RESTORE) {
             if (this.ids.containsKey(gts.getId())) {
@@ -183,7 +182,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
             }
             //return true;
         } 
-        
+
         if (source != null && this.ES_RESTORE) {
             if (tmp.compareAndSet(false, true)) {
                 LOG.info("Restore added " + missing + " gts");
@@ -191,25 +190,25 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         }
 
         boolean notKnown = (null == this.ids.putIfAbsent(gts.getId(), true));
-        
+
         if (notKnown){
             Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_DIRECTORY_GTS, Sensision.EMPTY_LABELS, 1);
         }
-        
+
         // Based on the current GTS create an Elastic Item
         ElasticSearchItem storeItem = new ElasticSearchItem(gts, ES_APP, ES_INDEX_NAME);
 
         // If request corresponds to a meta update, then apply an update only on the series attributes
         if(Configuration.INGRESS_METADATA_UPDATE_ENDPOINT == source && notKnown) {
-            
-			// Create an Elastic Update request
-			UpdateRequest updateRequest = new UpdateRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
-					.doc(storeItem.getAttributesSource(ES_ATTRIBUTES));
 
-			// Add it to current bulk processor
-			this.client.add(updateRequest);
+            // Create an Elastic Update request
+            UpdateRequest updateRequest = new UpdateRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
+                    .doc(storeItem.getAttributesSource(ES_ATTRIBUTES));
 
-			
+            // Add it to current bulk processor
+            this.client.add(updateRequest);
+
+
         } else {
             // Create Elastic index request
             IndexRequest indexRequest;
@@ -231,6 +230,12 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * @return
      */
     public boolean delete(GTS gts) {
+
+        // Check if backend is alive
+        if (!this.client.getConnectedStatus()) {
+            this.client.tryToConnect();
+            return false;
+        }
 
         Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_DIRECTORY_GTS, Sensision.EMPTY_LABELS, -1);
 

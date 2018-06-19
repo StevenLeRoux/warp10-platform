@@ -39,12 +39,11 @@ import io.warp10.sensision.Sensision;
  */
 public class ExplorerClientPool {
 
-    
     /**
      * Is current backend client available
      */
     private AtomicBoolean connected = new AtomicBoolean(false);
-    
+
 
     /**
      * Is current testing connection on backend client
@@ -65,6 +64,8 @@ public class ExplorerClientPool {
 
 
     BulkClient bulkClient;
+
+    BulkClient errorBulk;
 
     /**
      * Index of the active pool
@@ -160,8 +161,11 @@ public class ExplorerClientPool {
         }
         client.init(ELASTIC_HOSTS_NAMES, ES_USER, ES_PASSWORD);
 
-        this.tryToConnect();
-        
+        // Open a bulk, only for "error request" that can store 2 times more data in buffer but send data in single request 
+        this.errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT * 2,0, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
+
+        this.tryToConnect();    
+
         this.bulkClient = new BulkClient(client, this.ELASTIC_BULK_COUNT,this.ELASTIC_BULK_CONCURRENT_REQUESTS, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);     
     }
 
@@ -256,30 +260,26 @@ public class ExplorerClientPool {
 
         waiting.put(request.id(), waitingList);
     }
-    
+
     /**
      * Manage fail bulk response in case of requests
      * @param bulkResponse failed request
      */
     public void onFailBulkRequest(BulkRequest bulkRequest) {
-        
-        if (this.connected.compareAndSet(true, false)) {
-            this.tryToConnect();
-        }
+
+        this.tryToConnect();
+
         // Send error requests count to sensision
         Sensision.update("warp.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
         // In case of requests failure
         if (this.connected.get()) {
-            BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
             for (DocWriteRequest bulkItem : bulkRequest.requests()) {
                 errorBulk.addBulk(bulkItem);
             }
-            
-            errorBulk.closeClient();
         }
     }
-    
+
     /** 
      * Check if current client is availble
      * true connected
@@ -295,34 +295,34 @@ public class ExplorerClientPool {
      * @param currentProcessing
      */
     public void tryToConnect() {
-        
+
         // Thread safe operation, set boolean connecting to true
         if (this.connecting.compareAndSet(false, true)) {
             try {
-                
+
                 // Get current client answer
                 MainResponse response = client.getClient().info();
-                
+
                 // Check if server is available
                 if (response.isAvailable()) {
-                    
+
                     // If server is now available compare to old value
                     if (this.connected.compareAndSet(false, response.isAvailable())) {
-                        
+
                         // Restart processing at stop state
                         restore(this.processing);
                     } 
                 } else {
-                    
+
                     // If server isn't available, set connected to false
                     this.connected.compareAndSet(true, response.isAvailable());
                 }
-                
+
             } catch (IOException e) {
                 LOG.warn(e.getMessage());
             } finally {
-                
-             // Release boolean connecting to true
+
+                // Release boolean connecting to true
                 this.connecting.compareAndSet(true, false);
             }
         }
@@ -333,18 +333,16 @@ public class ExplorerClientPool {
      * @param currentProcessing
      */
     private void restore(ConcurrentMap<String, DocWriteRequest> currentProcessing) {
-        BulkClient errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT,1, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
         for (DocWriteRequest bulkItem : currentProcessing.values()) {
             errorBulk.addBulk(bulkItem);
-        }  
-        errorBulk.closeClient();      
+        }    
     }
 
     public boolean exist(String id, String indexName) throws IOException {
         GetRequest getRequest = new GetRequest(indexName);
-        
+
         getRequest.id(id);
-        
+
         // Do not load current document source
         FetchSourceContext fetchSourceContext = new FetchSourceContext(false);
         getRequest.fetchSourceContext(fetchSourceContext);
@@ -354,44 +352,44 @@ public class ExplorerClientPool {
         } else {
             return false;
         }
-        
+
     }
 
 
     public boolean loadIds(ConcurrentMap<String, Boolean> ids, String indexName) {
 
         try {
-            
+
             // Set scroll request size and keep alive scroll time
             int requestSize = this.ELASTIC_BULK_COUNT;
             final Scroll scroll = new Scroll(TimeValue.timeValueMinutes(1L));
-            
+
             // Prepare search all
             SearchRequest searchRequest = new SearchRequest(indexName); 
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             searchSourceBuilder.query(QueryBuilders.matchAllQuery()); 
-            
+
             // Remove source from result and set request option
             searchSourceBuilder.fetchSource(false);
             searchSourceBuilder.size(requestSize); 
             searchRequest.scroll(scroll);
             searchRequest.source(searchSourceBuilder);
-            
+
             // Execute request
             SearchResponse searchResponse = client.getClient().search(searchRequest);
-            
+
             // Get Scroller id
             String scrollId = searchResponse.getScrollId(); 
-            
+
             // Loop over search result         
             SearchHit[] searchHits = searchResponse.getHits().getHits();
 
             while (searchHits != null && searchHits.length > 0) { 
-                
+
                 for (SearchHit searchHit : searchHits) {
                     ids.putIfAbsent(searchHit.getId(), true);
                 }
-                
+
                 SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId); 
                 scrollRequest.scroll(scroll);
                 searchResponse = client.getClient().searchScroll(scrollRequest);
@@ -400,7 +398,7 @@ public class ExplorerClientPool {
             }
             ClearScrollRequest clearScrollRequest = new ClearScrollRequest(); 
             clearScrollRequest.addScrollId(scrollId);
-            
+
             client.getClient().clearScrollAsync(clearScrollRequest,Clearlistener);
 
         } catch (IOException e) {
@@ -409,7 +407,7 @@ public class ExplorerClientPool {
         }
         return false;
     }
-    
+
     ActionListener<ClearScrollResponse> Clearlistener =new ActionListener<ClearScrollResponse>() {
         @Override
         public void onResponse(ClearScrollResponse clearScrollResponse) {
