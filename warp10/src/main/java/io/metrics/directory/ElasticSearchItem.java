@@ -25,6 +25,10 @@ public class ElasticSearchItem {
     private List<Map<String, String>> attributes;
     private String applicationName;
 
+    private Boolean hasLastActivity = false;
+    private Long lastActivity;
+
+
     public String generateMetaJson(String type) throws JSONException {
         // Create a JSON index Object
         JSONObject indexJSON = new JSONObject();
@@ -50,6 +54,11 @@ public class ElasticSearchItem {
         this.labels = removeUnapropriateData(gts.getLabels());
         this.attributes = removeUnapropriateData(gts.getAttributes());
         this.applicationName = gts.getLabels().get(application);
+        if (gts.isSetLastActivity()) {
+            this.lastActivity = gts.getLastActivity();
+            this.hasLastActivity = true;
+        }
+        
     }
 
     /**
@@ -122,9 +131,12 @@ public class ElasticSearchItem {
      * @param attributesKey
      * @return
      */
-    public Map<String, Object> getAttributesSource(String attributesKey) {
+    public Map<String, Object> getUpdateSource(String attributesKey, String lastActivityKey) {
         Map<String, Object> source =  new HashMap<String,Object>();
         source.put(attributesKey, attributes);  
+        if (this.hasLastActivity) {
+            source.put(lastActivityKey, this.lastActivity);
+        }
         return source;
     }
 
@@ -133,14 +145,19 @@ public class ElasticSearchItem {
      * @return
      * @throws IOException 
      */
-    public Map<String, Object> getSource(String classNameKey, String applicationKey, String labelsKey, String attributesKey) {
+    public Map<String, Object> getSource(String classNameKey, String applicationKey, String labelsKey, String attributesKey, String lastActivityKey) {
 
         Map<String, Object> source =  new HashMap<String,Object>(4);
         source.put(labelsKey, this.labels);
         source.put(attributesKey, this.attributes);
         source.put(classNameKey, this.seriesName);
         source.put(applicationKey, this.applicationName);
+        
+        if (this.hasLastActivity) {
+            source.put(lastActivityKey, this.lastActivity);
+        }
 
+        
         return source;
     }
 }

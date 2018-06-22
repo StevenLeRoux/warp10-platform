@@ -58,6 +58,14 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * By default use attributes
      */
     private String ES_ATTRIBUTES = "attributes";
+    
+
+    /**
+     * Parameter used in Directory ES
+     * Name of the elastic key for last activity
+     * By default use attributes
+     */
+    private String ES_LAST_ACTIVITY = "lastActivity";
 
     /**
      * Parameter used in Directory ES
@@ -118,6 +126,10 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
 
         if (null != properties.getProperty("directory.es.attributes")) {
             this.ES_ATTRIBUTES = properties.getProperty("directory.es.attributes");
+        }
+
+        if (null != properties.getProperty("directory.es.last.activity")) {
+            this.ES_LAST_ACTIVITY = properties.getProperty("directory.es.last.activity");
         }
 
         if (null != properties.getProperty("directory.es.store.app")) {
@@ -194,7 +206,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         if (notKnown){
             Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_DIRECTORY_GTS, Sensision.EMPTY_LABELS, 1);
         }
-
+        
         // Based on the current GTS create an Elastic Item
         ElasticSearchItem storeItem = new ElasticSearchItem(gts, ES_APP, ES_INDEX_NAME);
 
@@ -203,18 +215,18 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
 
             // Create an Elastic Update request
             UpdateRequest updateRequest = new UpdateRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
-                    .doc(storeItem.getAttributesSource(ES_ATTRIBUTES));
+                    .doc(storeItem.getUpdateSource(ES_ATTRIBUTES, ES_LAST_ACTIVITY));
 
             // Add it to current bulk processor
             this.client.add(updateRequest);
-
 
         } else {
             // Create Elastic index request
             IndexRequest indexRequest;
 
             indexRequest = new IndexRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
-                    .source(storeItem.getSource(ES_CLASS, ES_STORE_APP, ES_LABELS, ES_ATTRIBUTES));
+                    .source(storeItem.getSource(ES_CLASS, ES_STORE_APP, ES_LABELS, ES_ATTRIBUTES, ES_LAST_ACTIVITY));
+            
             // Add it to current bulk processor
             this.client.add(indexRequest);
         }
@@ -274,5 +286,4 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
     public boolean known (GTS gts) {
         return this.ids.containsKey(gts.getId());
     }
-
 }

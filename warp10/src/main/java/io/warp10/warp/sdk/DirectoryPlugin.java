@@ -17,6 +17,7 @@
 package io.warp10.warp.sdk;
 
 import io.warp10.WarpURLEncoder;
+import io.warp10.continuum.store.thrift.data.Metadata;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Collections;
@@ -24,6 +25,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import org.apache.thrift.EncodingUtils;
+
 import java.util.Properties;
 import java.util.UUID;
 
@@ -40,6 +44,9 @@ public abstract class DirectoryPlugin {
     private final Map<String,String> labels;
     private final Map<String,String> attributes;
     private String representation = null;
+    private long lastActivity; // optional
+    private byte __isset_bitfield = 0;
+    private static final int __LASTACTIVITY_ISSET_ID = 2;
 
     public GTS(String id, String name, Map<String,String> labels, Map<String,String> attributes) {
       this.id = id;
@@ -128,6 +135,36 @@ public abstract class DirectoryPlugin {
         sb.append(encoded);
       } catch (UnsupportedEncodingException uee) {
       }
+    }
+    
+    /**
+     * Timestamp (in ms since the Epoch) of the last observed activity on this Geo Time Series.
+     * Activity can be update, attribute changes or deletions depending on the configuration.
+     * This field is used to select GTS which have had (or not) activity after a given moment in time.
+     * The last activity timestamp is an estimate of the moment of the last activity, its resolution
+     * depends on the configuration of the activity window in Warp 10.
+     */
+
+    public void unsetLastActivity() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __LASTACTIVITY_ISSET_ID);
+    }
+
+    /** Returns true if field lastActivity is set (has been assigned a value) and false otherwise */
+    public boolean isSetLastActivity() {
+      return EncodingUtils.testBit(__isset_bitfield, __LASTACTIVITY_ISSET_ID);
+    }
+
+    public void setLastActivityIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __LASTACTIVITY_ISSET_ID, value);
+    }
+    public long getLastActivity() {
+        return lastActivity;
+    }
+
+    public GTS setLastActivity(long lastActivity) {
+        this.lastActivity = lastActivity;
+        setLastActivityIsSet(true);
+        return this;
     }
   }
 

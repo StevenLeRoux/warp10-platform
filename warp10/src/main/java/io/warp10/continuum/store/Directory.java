@@ -653,6 +653,10 @@ public class Directory extends AbstractHandler implements DirectoryService.Iface
                         metadata.getAttributes());
 
                     nano = System.nanoTime();
+                    
+                    if (metadata.isSetLastActivity()) {
+                        gts.setLastActivity(metadata.getLastActivity());
+                    }
 
                     if (!plugin.store(null, gts)) {
                       throw new RuntimeException("Error storing GTS " + gts + " using external plugin.");
@@ -1629,6 +1633,10 @@ public class Directory extends AbstractHandler implements DirectoryService.Iface
                     metadata.getName(),
                     metadata.getLabels(),
                     metadata.getAttributes());
+                
+                if (metadata.isSetLastActivity()) {
+                    gts.setLastActivity(metadata.getLastActivity());
+                }
 
                 //
                 // If we are doing a metadata update and the GTS is not known, skip the call to store.
