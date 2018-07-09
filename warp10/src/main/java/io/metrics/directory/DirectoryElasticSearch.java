@@ -154,6 +154,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         if (this.init && this.ES_RESTORE) {
             loadAllIds();
         }
+        
     }
 
     private void loadAllIds() {
@@ -173,7 +174,7 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
      * @return true if the storing succeeded, false otherwise
      */
     public boolean store(String source, GTS gts) {
-
+        
         // source
         // null -> hbase load
         // INGRESS_METADATA_SOURCE -> /update

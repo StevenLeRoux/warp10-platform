@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
@@ -267,6 +268,7 @@ public class ExplorerClientPool {
      */
     public void onFailBulkRequest(BulkRequest bulkRequest) {
 
+        LockSupport.parkNanos(1000000000L);
         this.tryToConnect();
 
         // Send error requests count to sensision
