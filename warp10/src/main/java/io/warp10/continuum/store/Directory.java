@@ -653,7 +653,7 @@ public class Directory extends AbstractHandler implements DirectoryService.Iface
                         metadata.getAttributes());
 
                     nano = System.nanoTime();
-                    
+
                     if (metadata.isSetLastActivity()) {
                         gts.setLastActivity(metadata.getLastActivity());
                     }
@@ -1633,7 +1633,7 @@ public class Directory extends AbstractHandler implements DirectoryService.Iface
                     metadata.getName(),
                     metadata.getLabels(),
                     metadata.getAttributes());
-                
+
                 if (metadata.isSetLastActivity()) {
                     gts.setLastActivity(metadata.getLastActivity());
                 }
@@ -2106,8 +2106,12 @@ public class Directory extends AbstractHandler implements DirectoryService.Iface
                 if (null == labelValue) {
                   labelValue = metadata.getAttributes().get(labelName);
                   if (null == labelValue) {
-                    exclude = true;
-                    break;
+                    if (labelPatterns.get(labelName).isEmpty()) {
+                      labelValue = "";
+                    } else {
+                      exclude = true;
+                      break;
+                    }
                   }
                 }
 
