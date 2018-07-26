@@ -106,6 +106,12 @@ public class ExplorerClientPool {
      * Bulk amount of time to wait before flushing (seconds), default 10s
      */
     private long ELASTIC_BULK_TIME = 10L;
+    
+    
+    /**
+     * Max elastic client timeout, default 60s in ms
+     */
+    private int ELASTIC_TIMEOUT = 60000;
 
     /**
      * Bulk number of concurrent requests allowed, default 1
@@ -160,7 +166,11 @@ public class ExplorerClientPool {
         if (null != properties.getProperty("directory.es.bulk.retry.max")) {
             this.ELASTIC_BULK_RETRY = Integer.parseInt(properties.getProperty("directory.es.bulk.retry.max"));
         }
-        client.init(ELASTIC_HOSTS_NAMES, ES_USER, ES_PASSWORD);
+        
+        if (null != properties.getProperty("directory.es.maxtimeout")) {
+            this.ELASTIC_TIMEOUT = Integer.parseInt(properties.getProperty("directory.es.maxtimeout"));
+        }
+        client.init(ELASTIC_HOSTS_NAMES, ES_USER, ES_PASSWORD, ELASTIC_TIMEOUT);
 
         // Open a bulk, only for "error request" that can store 2 times more data in buffer but send data in single request 
         this.errorBulk = new BulkClient(client, this.ELASTIC_BULK_COUNT * 2,0, this.ELASTIC_BULK_TIME, this.ELASTIC_BULK_INITIAL_TIME, this.ELASTIC_BULK_RETRY, bulkListener);
@@ -268,7 +278,7 @@ public class ExplorerClientPool {
      */
     public void onFailBulkRequest(BulkRequest bulkRequest) {
 
-        LockSupport.parkNanos(1000000000L);
+        LockSupport.parkNanos(6000000000L);
         this.tryToConnect();
 
         // Send error requests count to sensision
