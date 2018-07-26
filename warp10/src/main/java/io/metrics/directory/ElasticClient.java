@@ -29,7 +29,7 @@ public class ElasticClient {
      * @param user
      * @param pwd
      */
-    public void init(String hostsNames, String user, String pwd) {
+    public void init(String hostsNames, String user, String pwd, int timeout) {
         // Dynamically load Elastic hosts from user parameter split per ","
         String[] hosts = hostsNames.split(",");
 
@@ -48,14 +48,14 @@ public class ElasticClient {
         // Initialize High level Elastic Rest builder client
         RestClientBuilder restClientBuilder = RestClient.builder(httpsHost);
 
-        restClientBuilder.setMaxRetryTimeoutMillis(1000000);
+        // Add a default max retry timeout
+        restClientBuilder.setMaxRetryTimeoutMillis(timeout);
 
         // set auth
         restClientBuilder.setHttpClientConfigCallback(getHttpConfig(credentialsProvider));
 
         // Open current Elastic client
-        this.client = new RestHighLevelClient(
-                restClientBuilder);
+        this.client = new RestHighLevelClient(restClientBuilder);
     }
 
     /** 
