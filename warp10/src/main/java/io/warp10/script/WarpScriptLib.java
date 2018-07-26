@@ -70,6 +70,7 @@ import io.warp10.script.aggregator.Min;
 import io.warp10.script.aggregator.Or;
 import io.warp10.script.aggregator.Percentile;
 import io.warp10.script.aggregator.Rate;
+import io.warp10.script.aggregator.RMS;
 import io.warp10.script.aggregator.ShannonEntropy;
 import io.warp10.script.aggregator.StandardDeviation;
 import io.warp10.script.aggregator.Sum;
@@ -114,8 +115,6 @@ import io.warp10.script.filter.FilterLastLT;
 import io.warp10.script.filter.FilterLastNE;
 import io.warp10.script.filter.LatencyFilter;
 import io.warp10.script.functions.*;
-import io.warp10.script.lora.LORAENC;
-import io.warp10.script.lora.LORAMIC;
 import io.warp10.script.mapper.MapperAbs;
 import io.warp10.script.mapper.MapperAdd;
 import io.warp10.script.mapper.MapperCeil;
@@ -238,11 +237,14 @@ import io.warp10.script.processing.shape.PellipseMode;
 import io.warp10.script.processing.shape.PendContour;
 import io.warp10.script.processing.shape.PendShape;
 import io.warp10.script.processing.shape.Pline;
+import io.warp10.script.processing.shape.PloadShape;
 import io.warp10.script.processing.shape.Ppoint;
 import io.warp10.script.processing.shape.Pquad;
 import io.warp10.script.processing.shape.PquadraticVertex;
 import io.warp10.script.processing.shape.Prect;
 import io.warp10.script.processing.shape.PrectMode;
+import io.warp10.script.processing.shape.Pshape;
+import io.warp10.script.processing.shape.PshapeMode;
 import io.warp10.script.processing.shape.Psphere;
 import io.warp10.script.processing.shape.PsphereDetail;
 import io.warp10.script.processing.shape.PstrokeCap;
@@ -377,9 +379,10 @@ public class WarpScriptLib {
     functions.put("REV", new REV("REV"));
     
     functions.put(BOOTSTRAP, new NOOP(BOOTSTRAP));
-    
+
     functions.put("RTFM", new RTFM("RTFM"));
-    
+    functions.put("MAN", new MAN("MAN"));
+
     functions.put("REXEC", new REXEC("REXEC"));
     functions.put("REXECZ", new REXEC("REXECZ", true));
     
@@ -477,7 +480,7 @@ public class WarpScriptLib {
     functions.put("DEFINEDMACRO", new DEFINEDMACRO("DEFINEDMACRO"));
     functions.put("NaN", new NaN("NaN"));
     functions.put("ISNaN", new ISNaN("ISNaN"));
-    functions.put("TYPEOF", new TYPEOF("TYPEOF"));      
+    functions.put("TYPEOF", new TYPEOF("TYPEOF"));
     functions.put("EXTLOADED", new EXTLOADED("EXTLOADED"));
     functions.put("ASSERT", new ASSERT("ASSERT"));
     functions.put("ASSERTMSG", new ASSERTMSG("ASSERTMSG"));
@@ -713,6 +716,7 @@ public class WarpScriptLib {
     functions.put("MAKEGTS", new MAKEGTS("MAKEGTS"));
     functions.put("ADDVALUE", new ADDVALUE("ADDVALUE", false));
     functions.put("SETVALUE", new ADDVALUE("SETVALUE", true));
+    functions.put("REMOVETICK", new REMOVETICK("REMOVETICK"));
     functions.put("FETCH", new FETCH("FETCH", false, null));
     functions.put("FETCHLONG", new FETCH("FETCHLONG", false, TYPE.LONG));
     functions.put("FETCHDOUBLE", new FETCH("FETCHDOUBLE", false, TYPE.DOUBLE));
@@ -907,7 +911,7 @@ public class WarpScriptLib {
     functions.put("FILTER", new FILTER("FILTER", true));
     functions.put("APPLY", new APPLY("APPLY", true));
     functions.put("PFILTER", new FILTER("FILTER", false));
-    functions.put("PAPPLY", new APPLY("APPLY", false));
+    functions.put("PAPPLY", new APPLY("PAPPLY", false));
     functions.put("REDUCE", new REDUCE("REDUCE", true));
     functions.put("PREDUCE", new REDUCE("PREDUCE", false));
     
@@ -1019,13 +1023,6 @@ public class WarpScriptLib {
     functions.put("COUNTER", new COUNTER("COUNTER"));
     functions.put("COUNTERVALUE", new COUNTERVALUE("COUNTERVALUE"));
     functions.put("COUNTERDELTA", new COUNTERDELTA("COUNTERDELTA"));
-    
-    //
-    // LoRaWAN
-    //
-    
-    functions.put("LORAMIC", new LORAMIC("LORAMIC"));
-    functions.put("LORAENC", new LORAENC("LORAENC"));
     
     //
     // Math functions
@@ -1163,6 +1160,7 @@ public class WarpScriptLib {
     
     functions.put("PbeginShape", new PbeginShape("PbeginShape"));
     functions.put("PendShape", new PendShape("PendShape"));
+    functions.put("PloadShape", new PloadShape("PloadShape"));
     functions.put("PbeginContour", new PbeginContour("PbeginContour"));
     functions.put("PendContour", new PendContour("PendContour"));
     functions.put("Pvertex", new Pvertex("Pvertex"));
@@ -1171,7 +1169,8 @@ public class WarpScriptLib {
     functions.put("PquadraticVertex", new PquadraticVertex("PquadraticVertex"));
     
     // TODO(hbs): support PShape (need to support PbeginShape etc applied to PShape instances)
-    //functions.put("PshapeMode", new PshapeMode("PshapeMode"));
+    functions.put("PshapeMode", new PshapeMode("PshapeMode"));
+    functions.put("Pshape", new Pshape("Pshape"));
     
     // Transform
     
@@ -1290,6 +1289,7 @@ public class WarpScriptLib {
     functions.put("bucketizer.count.nonnull", new Count("bucketizer.count.nonnull", true));
     functions.put("bucketizer.mean.circular", new CircularMean.Builder("bucketizer.mean.circular", true));
     functions.put("bucketizer.mean.circular.exclude-nulls", new CircularMean.Builder("bucketizer.mean.circular.exclude-nulls", false));
+    functions.put("bucketizer.rms", new RMS("bucketizer.rms", false));
     //
     // Mappers
     //
@@ -1343,7 +1343,8 @@ public class WarpScriptLib {
     functions.put("mapper.mean.circular", new CircularMean.Builder("mapper.mean.circular", true));
     functions.put("mapper.mean.circular.exclude-nulls", new CircularMean.Builder("mapper.mean.circular.exclude-nulls", false));
     functions.put("mapper.mod", new MapperMod.Builder("mapper.mod"));
-    
+    functions.put("mapper.rms", new RMS("mapper.rms", false));
+
     //
     // Reducers
     //
@@ -1385,7 +1386,9 @@ public class WarpScriptLib {
     functions.put("reducer.percentile", new Percentile.Builder("reducer.percentile"));
     functions.put("reducer.mean.circular", new CircularMean.Builder("reducer.mean.circular", true));
     functions.put("reducer.mean.circular.exclude-nulls", new CircularMean.Builder("reducer.mean.circular.exclude-nulls", false));
-    
+    functions.put("reducer.rms", new RMS("reducer.rms", false));
+    functions.put("reducer.rms.exclude-nulls", new RMS("reducer.rms.exclude-nulls", true));
+
     //
     // Filters
     //
@@ -1415,13 +1418,7 @@ public class WarpScriptLib {
 
     /////////////////////////
     
-    //
-    // TBD
-    //
-    
-    functions.put("mapper.distinct", new FAIL("mapper.distinct")); // Counts the number of distinct values in a window, using HyperLogLog???
-    functions.put("TICKSHIFT", new FAIL("TICKSHIFT")); // Shifts the ticks of a GTS by this many positions
-    
+
     Properties props = WarpConfig.getProperties();
       
     if (null != props && props.containsKey(Configuration.CONFIG_WARPSCRIPT_LANGUAGES)) {
@@ -1490,7 +1487,7 @@ public class WarpScriptLib {
     List<String> sortedext = new ArrayList<String>(ext);
     sortedext.sort(null);
     
-    boolean failedExt = false;
+    List<String> failedExt = new ArrayList<String>();
       
     //
     // Determine the possible jar from which WarpScriptLib was loaded
@@ -1519,7 +1516,7 @@ public class WarpScriptLib {
         
         if (null == url) {
           LOG.error("Unable to load extension '" + extension + "', make sure it is in the class path.");
-          failedExt = true;
+          failedExt.add(extension);
           continue;
         }
         
@@ -1567,8 +1564,15 @@ public class WarpScriptLib {
       }
     }
     
-    if (failedExt) {
-      throw new RuntimeException("Some WarpScript extensions could not be loaded, aborting.");
+    if (!failedExt.isEmpty()) {
+      StringBuilder sb = new StringBuilder();
+      sb.append("The following WarpScript extensions could not be loaded, aborting:");
+      for (String extension: failedExt) {
+        sb.append(" '");
+        sb.append(extension);
+        sb.append("'");
+      }
+      throw new RuntimeException(sb.toString());
     }
   }
   
