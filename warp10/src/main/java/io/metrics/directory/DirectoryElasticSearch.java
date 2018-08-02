@@ -214,12 +214,16 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         // If request corresponds to a meta update, then apply an update only on the series attributes
         if(Configuration.INGRESS_METADATA_UPDATE_ENDPOINT == source && notKnown) {
 
+            try {
             // Create an Elastic Update request
             UpdateRequest updateRequest = new UpdateRequest(storeItem.getIndex(), storeItem.getType(), storeItem.getId())
                     .doc(storeItem.getUpdateSource(ES_ATTRIBUTES, ES_LAST_ACTIVITY));
 
             // Add it to current bulk processor
             this.client.add(updateRequest);
+            } catch (IllegalArgumentException | ClassCastException e) {
+                 LOG.warn(e.getMessage());
+            }
 
         } else {
             // Create Elastic index request

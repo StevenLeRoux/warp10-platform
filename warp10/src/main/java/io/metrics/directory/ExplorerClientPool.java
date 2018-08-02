@@ -276,19 +276,22 @@ public class ExplorerClientPool {
      * Manage fail bulk response in case of requests
      * @param bulkResponse failed request
      */
-    public void onFailBulkRequest(BulkRequest bulkRequest) {
-
-        LockSupport.parkNanos(6000000000L);
-        this.tryToConnect();
+    public final void onFailBulkRequest(BulkRequest bulkRequest) {
 
         // Send error requests count to sensision
         Sensision.update("warp.directory.explorer.insert.requests.failed", Sensision.EMPTY_LABELS, 1);
 
+        LockSupport.parkNanos(6000000000L);
+        this.tryToConnect();
+        
         // In case of requests failure
         if (this.connected.get()) {
+            
             for (DocWriteRequest bulkItem : bulkRequest.requests()) {
                 errorBulk.addBulk(bulkItem);
             }
+
+            Sensision.update("warp.directory.explorer.documents.retried", Sensision.EMPTY_LABELS, bulkRequest.numberOfActions());
         }
     }
 
@@ -330,7 +333,8 @@ public class ExplorerClientPool {
                     this.connected.compareAndSet(true, response.isAvailable());
                 }
 
-            } catch (IOException e) {
+            } catch (IOException | IllegalStateException e) {
+                this.connected.compareAndSet(true, false);
                 LOG.warn(e.getMessage());
             } finally {
 
