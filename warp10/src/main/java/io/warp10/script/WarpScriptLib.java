@@ -1290,6 +1290,8 @@ public class WarpScriptLib {
     functions.put("bucketizer.mean.circular", new CircularMean.Builder("bucketizer.mean.circular", true));
     functions.put("bucketizer.mean.circular.exclude-nulls", new CircularMean.Builder("bucketizer.mean.circular.exclude-nulls", false));
     functions.put("bucketizer.rms", new RMS("bucketizer.rms", false));
+    functions.put("bucketizer.sd", new StandardDeviation.Builder("bucketizer.sd", false));
+    
     //
     // Mappers
     //
