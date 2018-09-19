@@ -543,6 +543,8 @@ public class StandaloneDirectoryClient implements DirectoryClient {
             meta.setName(className);
             meta.setLabels(ImmutableMap.copyOf(metadata.getLabels()));
             meta.setAttributes(ImmutableMap.copyOf(metadata.getAttributes()));
+            meta.setLastActivity(metadata.getLastActivity());
+            
             // 128BITS
             if (metadata.isSetClassId()) {
               meta.setClassId(metadata.getClassId());
