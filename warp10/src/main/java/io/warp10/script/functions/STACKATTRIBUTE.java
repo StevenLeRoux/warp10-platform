@@ -39,10 +39,6 @@ public class STACKATTRIBUTE extends NamedWarpScriptFunction implements WarpScrip
       throw new WarpScriptException(getName() + " expects a string as the attribute key.");
     }
     
-    if (key.equals("stack.token")) {
-        throw new WarpScriptException(getName() + " cannot retrieve a stack token.");	
-    }
-    
     stack.push(stack.getAttribute(key.toString()));
 
     return stack;
