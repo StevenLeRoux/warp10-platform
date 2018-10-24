@@ -1199,6 +1199,9 @@ public class GTSHelper {
     
     GTSHelper.sort(gts);
         
+    subgts.sorted = gts.sorted;
+    subgts.reversed = gts.reversed;
+    
     //
     // Determine index to start at
     //
