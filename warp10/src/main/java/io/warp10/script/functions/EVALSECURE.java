@@ -88,6 +88,7 @@ public class EVALSECURE extends NamedWarpScriptFunction implements WarpScriptSta
       stack.clear();
       throw t;      
     } finally {
+
       //
       // Set secure macro mode to its original value
       //

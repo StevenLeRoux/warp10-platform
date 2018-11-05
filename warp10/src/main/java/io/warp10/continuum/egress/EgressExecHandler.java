@@ -16,6 +16,7 @@
 
 package io.warp10.continuum.egress;
 
+import io.warp10.script.functions.AUTHENTICATE;
 import io.warp10.continuum.BootstrapManager;
 import io.warp10.continuum.Configuration;
 import io.warp10.continuum.LogUtil;
@@ -438,7 +439,7 @@ public class EgressExecHandler extends AbstractHandler {
       event = LogUtil.setLoggingEventAttribute(event, LogUtil.WARPSCRIPT_TIMES, times);
       
       if (stack.isAuthenticated()) {
-        event = LogUtil.setLoggingEventAttribute(event, WarpScriptStack.ATTRIBUTE_TOKEN, stack.getAttribute(WarpScriptStack.ATTRIBUTE_TOKEN).toString());        
+    	  event = LogUtil.setLoggingEventAttribute(event, WarpScriptStack.ATTRIBUTE_TOKEN, AUTHENTICATE.unhide(stack.getAttribute(WarpScriptStack.ATTRIBUTE_TOKEN).toString()));
       }
       
       if (null != t) {
