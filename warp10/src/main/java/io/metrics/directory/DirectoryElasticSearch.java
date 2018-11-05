@@ -183,7 +183,10 @@ public class DirectoryElasticSearch extends DirectoryPlugin {
         // Check if backend is alive
         if (!this.client.getConnectedStatus()) {
             this.client.tryToConnect();
-            return false;
+            if (!this.client.getConnectedStatus()) {            
+                System.exit(1);
+                return false;
+            }
         }
 
         // When loading directory and restore activated
