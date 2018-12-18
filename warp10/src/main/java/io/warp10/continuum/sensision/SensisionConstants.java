@@ -1488,4 +1488,8 @@ public class SensisionConstants {
   //
   
   public static final long SENSISION_TTL_PERUSER = 24 * 3600L * 1000L;
+
+	public static final String SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_CLEANUP_TRIGGERED = "warp.store.hbase.delete.cleanup.triggered";
+	public static final String SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_CLEANUP_INPROGRESS = "warp.store.hbase.delete.cleanup.inprogress";
+
 }

@@ -894,7 +894,13 @@ public class Configuration {
    * 0 meaning no pool is used.
    */
   public static final String STORE_NTHREADS_DELETE = "store.nthreads.delete";
-  
+
+	/**
+	 * Custom Metrics options for Metrics
+	 */
+	public static final String STORE_HBASE_DELETE_CLEANUP_ENABLE = "store.hbase.delete.cleanup.enable";
+  public static final String STORE_HBASE_DELETE_CLEANUP_THRESHOLD = "store.hbase.delete.cleanup.threshold";
+
   /**
    * ZooKeeper connect string for HBase
    */
