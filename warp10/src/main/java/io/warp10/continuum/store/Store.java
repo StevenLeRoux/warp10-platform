@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -82,6 +81,7 @@ import org.apache.hadoop.hbase.coprocessor.example.generated.BulkDeleteProtos.Bu
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoResponse.CompactionState;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.slf4j.Logger;
@@ -210,8 +210,15 @@ public class Store extends Thread {
   private Double rateLimit = null;
   
   private long throttlingDelay = 10000000L;
-  
-  public Store(KeyStore keystore, final Properties properties, Integer nthr) throws IOException {
+
+	/**
+	 * should trigger a major compaction if too much datapoints were deleted
+	 */
+	private boolean shouldPerformCleanup;
+	private long cleanupThreshold;
+	private static final int SLEEP_DURATION_DURING_CLEANUP = 60 * 1000; // 1min
+
+	public Store(KeyStore keystore, final Properties properties, Integer nthr) throws IOException {
     this.keystore = keystore;
     this.properties = properties;
     
@@ -237,7 +244,13 @@ public class Store extends Thread {
     final int nthreads = null != nthr ? nthr.intValue() : Integer.valueOf(properties.getProperty(io.warp10.continuum.Configuration.STORE_NTHREADS_KAFKA, "1"));
     
     nthreadsDelete = Integer.parseInt(properties.getProperty(io.warp10.continuum.Configuration.STORE_NTHREADS_DELETE, "0"));
-    
+
+    // Configuration for cleanup after deletes
+    this.shouldPerformCleanup = Boolean.parseBoolean(properties.getProperty(io.warp10.continuum.Configuration.STORE_HBASE_DELETE_CLEANUP_ENABLE, "false"));
+    this.cleanupThreshold = Long.parseLong(properties.getProperty(io.warp10.continuum.Configuration.STORE_HBASE_DELETE_CLEANUP_THRESHOLD,
+		    String.valueOf(Long.MAX_VALUE)));
+
+
     //
     // If instructed to do so, launch a thread which will read the throttling file periodically
     //
@@ -1416,68 +1429,138 @@ public class Store extends Thread {
         }
       };
 
-      Callable<Object> deleteCallable = new Callable<Object>() {
-        @Override
-        public Object call() throws Exception {
-          store.inflightDeletions.addAndGet(1);
+	    Callable<Object> deleteCallable = new Callable<Object>() {
+		    @Override
+		    public Object call() throws Exception {
+			    store.inflightDeletions.addAndGet(1);
 
-          long nano = System.nanoTime();
-          
-          try {
-            Map<byte[], BulkDeleteResponse> result = table.coprocessorService(BulkDeleteService.class, scan.getStartRow(), scan.getStopRow(), callable);
+			    long nano = System.nanoTime();
 
-            nano = System.nanoTime() - nano;
+			    try {
+				    Map<byte[], BulkDeleteResponse> result = table
+						    .coprocessorService(BulkDeleteService.class, scan.getStartRow(), scan.getStopRow(),
+								    callable);
 
-            if (error.get()) {
-              throw new IOException("Error while processing delete request.");
-            }
-            
-            long noOfDeletedRows = 0L;
-            long noOfDeletedVersions = 0L;
-            long noOfRegions = result.size();
+				    nano = System.nanoTime() - nano;
 
-            // One element per region
-            for (BulkDeleteResponse response : result.values()) {
-              noOfDeletedRows += response.getRowsDeleted();
-              noOfDeletedVersions += response.getVersionsDeleted();
-            }
-            
-            //
-            // Update Sensision metrics for deletion
-            //
-            
-            Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_TIME_NANOS, Sensision.EMPTY_LABELS, nano);
-            Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_OPS, Sensision.EMPTY_LABELS, 1);
-            Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_REGIONS, Sensision.EMPTY_LABELS, noOfRegions);
-            Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_DATAPOINTS, Sensision.EMPTY_LABELS, noOfDeletedVersions);
+				    if (error.get()) {
+					    throw new IOException("Error while processing delete request.");
+				    }
 
-            Metadata meta = msg.getMetadata();
-            if (null != meta) {
-              Map<String, String> labels = new HashMap<>();
-              labels.put(SensisionConstants.SENSISION_LABEL_OWNER, meta.getLabels().get(Constants.OWNER_LABEL));
-              labels.put(SensisionConstants.SENSISION_LABEL_APPLICATION, meta.getLabels().get(Constants.APPLICATION_LABEL));
-              Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_DATAPOINTS_PEROWNERAPP, labels, noOfDeletedVersions);
-            }            
-          } catch (Throwable t) {
-            t.printStackTrace();
-            if (t instanceof Exception) {
-              throw (Exception) t;
-            } else {
-              throw new Exception(t);
-            }
-          } finally {
-            if (error.get()) {
-              LOG.info("ERROR");
-              store.deletionErrors.addAndGet(1);
-              store.abort.set(true);
-              localabort.set(true);
-            }
-            store.inflightDeletions.addAndGet(-1);
-          }
+				    long noOfDeletedRows = 0L;
+				    long noOfDeletedVersions = 0L;
+				    long noOfRegions = result.size();
 
-          return null;
-        }
-      };
+				    // One element per region
+				    for (Map.Entry<byte[], BulkDeleteResponse> mapEntry : result.entrySet()) {
+					    BulkDeleteResponse response = mapEntry.getValue();
+					    byte[] regionName = mapEntry.getKey();
+
+					    noOfDeletedRows += response.getRowsDeleted();
+					    noOfDeletedVersions += response.getVersionsDeleted();
+
+					    LOG.info("deleted " + response.getRowsDeleted() + " on " + regionName);
+
+					    // we are only triggering a compaction if it is enable and if threshold is reached
+					    if (store.shouldPerformCleanup
+							    && response.getRowsDeleted() > store.cleanupThreshold) {
+
+						    CompactionState compactionState = store.conn
+								    .getAdmin().getCompactionStateForRegion(regionName);
+
+						    if (compactionState != null) {
+							    LOG.info(
+									    regionName + " is in " + compactionState.getValueDescriptor().toString());
+							    if (compactionState.getNumber() <= CompactionState.MINOR_VALUE) {
+								    LOG.info("too much deletes, triggering major compaction on " + regionName);
+								    store.conn.getAdmin().majorCompactRegion(regionName);
+
+								    Sensision.update(
+										    SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_CLEANUP_TRIGGERED,
+										    Sensision.EMPTY_LABELS, 1);
+
+								    LOG.info("cleanup started");
+								    Sensision.set(
+										    SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_CLEANUP_INPROGRESS,
+										    Sensision.EMPTY_LABELS, 1);
+
+								    boolean inProgress = true;
+								    while (inProgress) {
+									    // wait for a minute to check regions
+									    Thread.sleep(SLEEP_DURATION_DURING_CLEANUP);
+									    CompactionState currentCompactionState = store.conn
+											    .getAdmin().getCompactionStateForRegion(regionName);
+
+									    if (currentCompactionState == null) {
+										    LOG.warn("cannot get current compactionState for " + regionName);
+										    continue;
+									    }
+
+									    LOG.info("region " + regionName + " is in " + currentCompactionState);
+									    if (currentCompactionState.getNumber() < CompactionState.MAJOR_VALUE) {
+										    inProgress = false;
+									    }
+								    }
+								    LOG.info("cleanup ended");
+								    Sensision.set(
+										    SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_CLEANUP_INPROGRESS,
+										    Sensision.EMPTY_LABELS, 0);
+							    }
+
+						    } else {
+							    LOG.warn("compactionState is null, cannot check initial status of region");
+						    }
+					    }
+				    }
+
+				    //
+				    // Update Sensision metrics for deletion
+				    //
+				    Sensision
+						    .update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_TIME_NANOS,
+								    Sensision.EMPTY_LABELS, nano);
+				    Sensision.update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_OPS,
+						    Sensision.EMPTY_LABELS, 1);
+				    Sensision
+						    .update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_REGIONS,
+								    Sensision.EMPTY_LABELS, noOfRegions);
+				    Sensision
+						    .update(SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_DATAPOINTS,
+								    Sensision.EMPTY_LABELS, noOfDeletedVersions);
+
+				    Metadata meta = msg.getMetadata();
+				    if (null != meta) {
+					    Map<String, String> labels = new HashMap<>();
+					    labels.put(SensisionConstants.SENSISION_LABEL_OWNER,
+							    meta.getLabels().get(Constants.OWNER_LABEL));
+					    labels.put(SensisionConstants.SENSISION_LABEL_APPLICATION,
+							    meta.getLabels().get(Constants.APPLICATION_LABEL));
+					    Sensision.update(
+							    SensisionConstants.SENSISION_CLASS_CONTINUUM_STORE_HBASE_DELETE_DATAPOINTS_PEROWNERAPP,
+							    labels, noOfDeletedVersions);
+				    }
+
+
+			    } catch (Throwable t) {
+				    t.printStackTrace();
+				    if (t instanceof Exception) {
+					    throw (Exception) t;
+				    } else {
+					    throw new Exception(t);
+				    }
+			    } finally {
+				    if (error.get()) {
+					    LOG.info("ERROR");
+					    store.deletionErrors.addAndGet(1);
+					    store.abort.set(true);
+					    localabort.set(true);
+				    }
+				    store.inflightDeletions.addAndGet(-1);
+			    }
+
+			    return null;
+		    }
+	    };
 
       if (null != store.deleteExecutor) {
         //
